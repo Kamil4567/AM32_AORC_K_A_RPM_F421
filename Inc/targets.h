@@ -2058,6 +2058,22 @@
 #define WS2812_PIN GPIO_PINS_8
 #endif
 
+// AORC_K_A_F421 hardware with RPM (speed) control enabled - spin coater build.
+// FIRMWARE_NAME kept identical so the config tool treats it as the same board.
+#ifdef AORC_K_A_RPM_F421
+#define FIRMWARE_NAME "AORC_K_F421"
+#define FILE_NAME "AORC_K_A_RPM_F421"
+#define DEAD_TIME 80
+#define HARDWARE_GROUP_AT_B
+#define HARDWARE_GROUP_AT_540
+#define USE_SERIAL_TELEMETRY
+#define USE_LED_STRIP
+#define WS2812_PIN GPIO_PINS_8
+#define DRIVE_BY_RPM
+#define SPEED_CONTROL_MIN_RPM 1000   // throttle just above zero
+#define SPEED_CONTROL_MAX_RPM 10000  // full throttle
+#endif
+
 #ifdef LSASRC_F421
 #define FIRMWARE_NAME "LSASRC_F421"
 #define FILE_NAME "LSASRC_F421"
@@ -6130,7 +6146,7 @@
 #ifdef MCU_CH32V203
 #define WCH
 #define NEED_INPUT_READY
-// #define ERASED_FLASH_BYTE    0x39
+#define ERASED_FLASH_BYTE    0x39
 #define CPU_FREQUENCY_MHZ    48                     //PWM freq is 48MHz, CPU freq is 96MHz
 #define EEPROM_START_ADD     (uint32_t)0x0800f800
 #define INTERVAL_TIMER       TIM4

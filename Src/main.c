@@ -275,9 +275,22 @@ void zcfoundroutine(void);
 //=============================  Defaults =============================
 //===========================================================================
 
+// Speed (RPM) control: a target can enable it with DRIVE_BY_RPM in targets.h.
+// Throttle input then sets the target mechanical RPM (linear between MIN and MAX)
+// and the speedPid loop holds it. Requires "sinusoidal startup" OFF in the settings.
+#ifdef DRIVE_BY_RPM
+uint8_t drive_by_rpm = 1;
+#else
 uint8_t drive_by_rpm = 0;
-uint32_t MAXIMUM_RPM_SPEED_CONTROL = 10000;
-uint32_t MINIMUM_RPM_SPEED_CONTROL = 1000;
+#endif
+#ifndef SPEED_CONTROL_MAX_RPM
+#define SPEED_CONTROL_MAX_RPM 10000
+#endif
+#ifndef SPEED_CONTROL_MIN_RPM
+#define SPEED_CONTROL_MIN_RPM 1000
+#endif
+uint32_t MAXIMUM_RPM_SPEED_CONTROL = SPEED_CONTROL_MAX_RPM;
+uint32_t MINIMUM_RPM_SPEED_CONTROL = SPEED_CONTROL_MIN_RPM;
 
 // assign speed control PID values values are x10000
 fastPID speedPid = { // commutation speed loop time
@@ -811,14 +824,7 @@ void loadEEpromSettings()
         uint8_t rpm_level_div = 0;
         if (eepromBuffer.motor_poles != 0) {
             rpm_level_div = 32 / eepromBuffer.motor_poles;
-            if (rpm_level_div == 0) {
-                // poles above 32 truncate 32/poles to zero, which would pin
-                // low/high_rpm_level at 0 and silently disable the low rpm
-                // throttle limiter (map() then always returns out_max).
-                rpm_level_div = 1;
-            }
         }
-
         if (rpm_level_div != 0) {
             low_rpm_level = motor_kv / 100 / rpm_level_div;
             high_rpm_level = motor_kv / 12 / rpm_level_div;
