@@ -21,6 +21,22 @@ AM32 has the following features:
 Download and install Keil community edition. Open the Keil project for the mcu you want in the "Keil projects" folder. Install any mcu packs if prompted. 
 Select the build target from the drop down box and build project 
 
+## Build na Windows (narzędzia z tools/windows)
+
+Katalog `tools/` nie jest w repozytorium (jest w `.gitignore`, ma ponad 1 GB). Narzędzia (ARM GCC, GNU make, OpenOCD, riscv-embedded-gcc, GnuTools) pobierasz jedną komendą z katalogu głównego projektu (PowerShell):
+
+```powershell
+Invoke-WebRequest -Uri "https://firmware.ardupilot.org/Tools/AM32-tools/windows-tools.zip" -OutFile "windows-tools.zip"
+Expand-Archive -Path "windows-tools.zip" -DestinationPath "." -Force
+Remove-Item "windows-tools.zip"
+```
+
+Po rozpakowaniu powstaje `tools\windows\`. Kompilacja (np. AORC_K_A_RPM_F421):
+
+```powershell
+& .\tools\windows\make\bin\make.exe "ARM_SDK_PREFIX=$((Resolve-Path .\tools\windows\xpack-arm-none-eabi-gcc-10.3.1-2.3\bin).Path)\arm-none-eabi-" AORC_K_A_RPM_F421
+```
+
 ## Firmware Release & Configuration Tool
 
 The latest release of the firmware can be found [here](https://am32.ca/downloads).
