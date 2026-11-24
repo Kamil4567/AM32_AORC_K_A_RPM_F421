@@ -2071,7 +2071,7 @@
 #define WS2812_PIN GPIO_PINS_8
 #define DRIVE_BY_RPM
 #define SPEED_CONTROL_MIN_RPM 1000   // throttle just above zero
-#define SPEED_CONTROL_MAX_RPM 10000  // full throttle
+#define SPEED_CONTROL_MAX_RPM 10400  // full throttle
 #endif
 
 #ifdef LSASRC_F421

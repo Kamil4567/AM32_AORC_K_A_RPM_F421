@@ -481,6 +481,7 @@ uint32_t total = 0;
 uint16_t readings[50];
 
 uint8_t bemf_timeout_happened = 0;
+volatile uint8_t telemetry_bemf_present = 0;
 uint8_t changeover_step = 5;
 uint8_t filter_level = 5;
 uint8_t running = 0;
@@ -1333,16 +1334,36 @@ void setInput()
         input = FIXED_DUTY_MODE_POWER * 20 + 47;
 #else
         if (eepromBuffer.use_sine_start) {
+            uint16_t sine_changeover = eepromBuffer.sine_mode_changeover_thottle_level * 20;
             if (adjusted_input < 30) { // dead band ?
                 input = 0;
             }
-            if (adjusted_input > 30 && adjusted_input < (eepromBuffer.sine_mode_changeover_thottle_level * 20)) {
+            if (adjusted_input > 30 && adjusted_input < sine_changeover) {
                 input = map(adjusted_input, 30,
-                    (eepromBuffer.sine_mode_changeover_thottle_level * 20), 47, 160);
+                    sine_changeover, 47, 160);
             }
-            if (adjusted_input >= (eepromBuffer.sine_mode_changeover_thottle_level * 20)) {
-                input = map(adjusted_input, (eepromBuffer.sine_mode_changeover_thottle_level * 20),
-                    2047, 160, 2047);
+            if (adjusted_input >= sine_changeover) {
+                if (use_speed_control_loop && drive_by_rpm) {
+                    uint32_t target_rpm = map(adjusted_input, sine_changeover, 2047,
+                        MINIMUM_RPM_SPEED_CONTROL, MAXIMUM_RPM_SPEED_CONTROL);
+                    target_e_com_time = 60000000UL / target_rpm / (eepromBuffer.motor_poles / 2);
+                    if (stepper_sine && input_override < 201 * 10000) {
+                        // Seed the handoff above the sine exit threshold; the RPM PID is paused in sine mode.
+                        input_override = 201 * 10000;
+                        speedPid.error = 0;
+                        speedPid.last_error = 0;
+                        speedPid.integral = 0;
+                    }
+                    input = (uint16_t)(input_override / 10000);
+                    if (input > 2047) {
+                        input = 2047;
+                    }
+                    if (input < 48) {
+                        input = 48;
+                    }
+                } else {
+                    input = map(adjusted_input, sine_changeover, 2047, 160, 2047);
+                }
             }
         } else {
             if (use_speed_control_loop) {
@@ -1381,7 +1402,11 @@ void setInput()
 #endif
 #ifndef BRUSHED_MODE
 if (!stepper_sine && armed) {
-        if (input >= 47 + (80 * eepromBuffer.use_sine_start)) {
+        uint16_t minimum_start_input = 47 + (80 * eepromBuffer.use_sine_start);
+        if (drive_by_rpm && eepromBuffer.use_sine_start) {
+            minimum_start_input = 47;
+        }
+        if (input >= minimum_start_input) {
             if (running == 0) {
                 allOff();
                 if (!old_routine) {
@@ -1402,7 +1427,7 @@ if (!stepper_sine && armed) {
             }
         }
 
-        if (input < 47 + (80 * eepromBuffer.use_sine_start)) {
+        if (input < minimum_start_input) {
             if (play_tone_flag != 0) {
                 switch (play_tone_flag) {
 									
@@ -1604,11 +1629,13 @@ void tenKhzRoutine()
                 if (rising) {
                     if (bemfcounter > min_bemf_counts_up) {
                         zcfound = 1;
+                        telemetry_bemf_present = 1;
                         zcfoundroutine();
                     }
                 } else {
                     if (bemfcounter > min_bemf_counts_down) {
                         zcfound = 1;
+                        telemetry_bemf_present = 1;
                         zcfoundroutine();
                     }
                 }
@@ -1641,7 +1668,14 @@ void tenKhzRoutine()
                 }
             }
             if (use_speed_control_loop && running) {
-                input_override += doPidCalculations(&speedPid, e_com_time, target_e_com_time);
+                if (drive_by_rpm && eepromBuffer.use_sine_start &&
+                    adjusted_input < (eepromBuffer.sine_mode_changeover_thottle_level * 20)) {
+                    input_override = input * 10000;
+                    speedPid.error = 0;
+                    speedPid.integral = 0;
+                } else {
+                    input_override += doPidCalculations(&speedPid, e_com_time, target_e_com_time);
+                }
                 if (input_override > 2047 * 10000) {
                     input_override = 2047 * 10000;
                 }
@@ -2285,7 +2319,7 @@ if(zero_crosses < 5){
         if (send_telemetry) {
 #ifdef USE_SERIAL_TELEMETRY
             makeTelemPackage((int8_t)degrees_celsius, battery_voltage, actual_current,
-                (uint16_t)(consumed_current >> 16), e_rpm);
+                (uint16_t)(consumed_current >> 16), telemetry_bemf_present ? e_rpm : 0);
             send_telem_DMA(10);
             send_telemetry = 0;
 #endif
@@ -2373,6 +2407,7 @@ if(zero_crosses < 5){
               LOW_VOLTAGE_CUTOFF = 1;
               input = 0;
               allOff();
+              telemetry_bemf_present = 1;
               maskPhaseInterrupts();
               running = 0;
               zero_input_count = 0;
@@ -2441,11 +2476,13 @@ if(zero_crosses < 5){
                     if (rising) {
                         if (bemfcounter > min_bemf_counts_up) {
                             zcfound = 1;
+                            telemetry_bemf_present = 1;
                             zcfoundroutine();
                         }
                     } else {
                         if (bemfcounter > min_bemf_counts_down) {
                             zcfound = 1;
+                            telemetry_bemf_present = 1;
                             zcfoundroutine();
                         }
                     }
@@ -2456,6 +2493,7 @@ if(zero_crosses < 5){
               zero_throttle_brake_active = 0;   // reset zero throttle brake on back emf timeout (rotation stop)
               if(running){
                 bemf_timeout_happened++;
+                telemetry_bemf_present = 0;
                 
                 temp_comp_pwm = eepromBuffer.comp_pwm;
                 maskPhaseInterrupts();
